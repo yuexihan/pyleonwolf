@@ -7,4 +7,9 @@
 #define PY3K
 #endif
 
+typedef enum {
+	INT,
+	DOUBLE
+} TYPE;
+
 #endif
