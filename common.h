@@ -2,6 +2,7 @@
 #define leonwolf_common_h_included__
 
 #include <Python.h>
+#include <structmember.h>
 
 #if PY_MAJOR_VERSION >= 3
 #define PY3K

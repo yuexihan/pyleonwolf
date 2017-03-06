@@ -1,7 +1,11 @@
-#include 'common.h'
+#include "common.h"
+#include "LPSTree.h"
+
+// Code
+#include "LPSTree.c"
 
 // registration table
-static PyMethodDef leonwolf_module_methods[]={
+static PyMethodDef leonwolf_module_methods[] = {
 	{NULL, NULL, 0, NULL}
 };
 

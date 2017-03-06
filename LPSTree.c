@@ -1,14 +1,15 @@
-#include <common.h>
+#include "LPSTree.h"
 #include <math.h>
 
 static PyTypeObject lpstree_type;
 
 #define lpstree_doc \
 	"LPSTree(n[, dtype])\n"\
-	"Create a Lazy Propagation Tree whose elements are set to zero.\n"\
-	"dtype can be int or float.\n\n"\
 	"LPSTree(lpstree)\n"\
-	"Create a copy of original tree."
+	"\n"\
+	"LPSTree(n[, dtype]) create a Lazy Propagation Tree with all elements set to zero.\n"\
+	"Dtype can be int or float.\n\n"\
+	"LPSTree(lpstree) create a copy of original tree."
 
 // get the middle index [s, e]
 static int getMid(int s, int e) {
@@ -64,16 +65,24 @@ static void updateRangeUtil_float(double *tree, double *lazy, int nodeIndex, int
 		return;
 	}
 	int mid = getMid(segmentStart, segmentEnd);
-	updateRangeUtil_int(tree, lazy, 2*nodeIndex+1, segmentStart, mid, updateStart, updateEnd, difference);
-	updateRangeUtil_int(tree, lazy, 2*nodeIndex+2, mid+1, segmentEnd, updateStart, updateEnd, difference);
+	updateRangeUtil_float(tree, lazy, 2*nodeIndex+1, segmentStart, mid, updateStart, updateEnd, difference);
+	updateRangeUtil_float(tree, lazy, 2*nodeIndex+2, mid+1, segmentEnd, updateStart, updateEnd, difference);
 	tree[nodeIndex] = tree[2*nodeIndex+1] + tree[2*nodeIndex+2];
 }
 
 static void updateRange_int(int *tree, int *lazy, int n, int updateStart, int updateEnd, int difference) {
+	if (updateStart < 0 || updateEnd > n-1 || updateStart > updateEnd) {
+		PyErr_SetString(PyExc_IndexError, "Index out of range");
+		return;
+	}
 	updateRangeUtil_int(tree, lazy, 0, 0, n-1, updateStart, updateEnd, difference);
 }
 
 static void updateRange_float(double *tree, double *lazy, int n, int updateStart, int updateEnd, double difference) {
+	if (updateStart < 0 || updateEnd > n-1 || updateStart > updateEnd) {
+		PyErr_SetString(PyExc_IndexError, "Index out of range");
+		return;
+	}
 	updateRangeUtil_float(tree, lazy, 0, 0, n-1, updateStart, updateEnd, difference);
 }
 
@@ -109,37 +118,28 @@ static double getSumUtil_float(double *tree, double *lazy, int segmentStart, int
 	if (segmentStart > segmentEnd || segmentEnd < queryStart || segmentStart > queryEnd)
 		return 0;
 	int mid = getMid(segmentStart, segmentEnd);
-	return getSumUtil_int(tree, lazy, segmentStart, mid, queryStart, queryEnd, 2*nodeIndex+1) + 
-			getSumUtil_int(tree, lazy, mid+1, segmentEnd, queryStart, queryEnd, 2*nodeIndex+2);
+	return getSumUtil_float(tree, lazy, segmentStart, mid, queryStart, queryEnd, 2*nodeIndex+1) + 
+			getSumUtil_float(tree, lazy, mid+1, segmentEnd, queryStart, queryEnd, 2*nodeIndex+2);
 }
 
 static int getSum_int(int *tree, int *lazy, int n, int queryStart, int queryEnd) {
 	if (queryStart < 0 || queryEnd > n-1 || queryStart > queryEnd) {
-		printf("Invalid Input");
-		return;
+		PyErr_SetString(PyExc_IndexError, "Index out of range");
+		return 0;
 	}
 	return getSumUtil_int(tree, lazy, 0, n-1, queryStart, queryEnd, 0);
 }
 
 static double getSum_float(double *tree, double *lazy, int n, int queryStart, int queryEnd) {
 	if (queryStart < 0 || queryEnd > n-1 || queryStart > queryEnd) {
-		printf("Invalid Input");
-		return;
+		PyErr_SetString(PyExc_IndexError, "Index out of range");
+		return 0;
 	}
 	return getSumUtil_float(tree, lazy, 0, n-1, queryStart, queryEnd, 0);
 }
 
-static void getValue(int *tree, int *lazy, int n, int i) {
-	return getSum(tree, lazy, n, i, i);
-}
-
-static void updateValue(int *tree, int *lazy, int n, int i, int new_val) {
-	int old_val = getValue(tree, lazy, n, i);
-	int difference = new_val - old_val;
-	updateRange(tree, lazy, n, i, i, difference);
-}
-
 static int constructSTUtil_int(int* tree, int* lazy, int* array, int segmentStart, int segmentEnd, int nodeIndex) {
+	lazy[nodeIndex] = 0;
 	if (segmentStart == segmentEnd) {
 		tree[nodeIndex] = array[segmentStart];
 		return array[segmentStart];
@@ -150,7 +150,8 @@ static int constructSTUtil_int(int* tree, int* lazy, int* array, int segmentStar
 	return tree[nodeIndex];
 }
 
-static double constructSTUtil_float(double* tree, double* lazy, int segmentStart, int segmentEnd, int nodeIndex) {
+static double constructSTUtil_float(double* tree, double* lazy, double* array,int segmentStart, int segmentEnd, int nodeIndex) {
+	lazy[nodeIndex] = 0.0;
 	if (segmentStart == segmentEnd) {
 		tree[nodeIndex] = array[segmentStart];
 		return array[segmentStart];
@@ -163,14 +164,14 @@ static double constructSTUtil_float(double* tree, double* lazy, int segmentStart
 
 static void constructST_int(LPSTree* self, int* array) {
 	int n = self->n;
-	int x = int(ceil(log2(n)));
-	int size = 2*int(pow(2, x)) - 1;
+	int x = (int)ceil(log2(n));
+	int size = 2*(int)pow(2, x) - 1;
 	self->size = size;
 
 	int* tree = PyMem_New(int, size);
 	int* lazy = PyMem_New(int, size);
-	if (tree == NULL or lazy == NULL) {
-		PyErr_NoMemory();
+	if (tree == NULL || lazy == NULL) {
+		return PyErr_NoMemory();
 	}
 	constructSTUtil_int(tree, lazy, array, 0, n-1, 0);
 	self->tree = tree;
@@ -178,14 +179,14 @@ static void constructST_int(LPSTree* self, int* array) {
 }
 static void constructST_float(LPSTree* self, double* array) {
 	int n = self->n;
-	int x = int(ceil(log2(n)));
-	int size = 2*int(pow(2, x)) - 1;
+	int x = (int)ceil(log2(n));
+	int size = 2*(int)pow(2, x) - 1;
 	self->size = size;
 
 	double* tree = PyMem_New(double, size);
 	double* lazy = PyMem_New(double, size);
-	if (tree == NULL or lazy == NULL) {
-		PyErr_NoMemory();
+	if (tree == NULL || lazy == NULL) {
+		return PyErr_NoMemory();
 	}
 	constructSTUtil_float(tree, lazy, array, 0, n-1, 0);
 	self->tree = tree;
@@ -200,13 +201,17 @@ static PyObject* lpstree_new(PyTypeObject* type, PyObject* args, PyObject* kwarg
 	if (self == NULL)
 		return NULL;
 
+	self->tree = NULL;
+	self->lazy = NULL;
 	return (PyObject*)self;
 }
 
 static int lpstree_init(LPSTree* self, PyObject* args, PyObject* kwargs) {
-	PyObject* dtype = NULL, object = NULL;
+	PyObject* dtype = NULL;
+	PyObject* object = NULL;
 	int n = 0;
-	if (PyArg_ParseTupleAndKeywords(args, kwargs, "i|O", ["n", "dtype"], &n, &dtype)) {
+	char *kwlist[] = {"n", "dtype", NULL};
+	if (PyArg_ParseTupleAndKeywords(args, kwargs, "i|O", kwlist, &n, &dtype)) {
 		if (n <= 0) {
 			PyErr_SetString(PyExc_ValueError, "Given n must be greater than 0.");
 			return -1;
@@ -226,61 +231,73 @@ static int lpstree_init(LPSTree* self, PyObject* args, PyObject* kwargs) {
 		self->n = n;
 		if (dtype == &PyInt_Type) {
 			self->dtype = INT;
-			int* array = PyMem_New(int, size);
+			int* array = PyMem_New(int, n);
 			if (array == NULL) {
-				PyErr_NoMemory();
+				return PyErr_NoMemory();
 				return -1;
 			}
-			for (int i = 0; i < n; i++) {
+			int i;
+			for (i = 0; i < n; i++) {
 				array[i] = 0;
 			}
 			constructST_int(self, array);
 			PyMem_Del(array);
 		} else {
 			self->dtype = DOUBLE;
-			double* array = PyMem_New(double, size);
+			double* array = PyMem_New(double, n);
 			if (array == NULL) {
-				PyErr_NoMemory();
+				return PyErr_NoMemory();
 				return -1;
 			}
-			for (int i = 0; i < n; i++) {
+			int i;
+			for (i = 0; i < n; i++) {
 				array[i] = 0.0;
 			}
 			constructST_float(self, array);
 			PyMem_Del(array);
 		}
 	} else if (PyArg_ParseTuple(args, "O", &object)) {
-		if (!PyObject_IsInstance(object, &lpstree_type)) {
+		PyErr_Clear();
+		if (PyObject_IsInstance(object, &lpstree_type) != 1) {
 			PyErr_SetString(PyExc_TypeError, "Given object is not an instance of LPSTree.");
+			return -1;
 		}
 		LPSTree* targetObject = (LPSTree*)object;
 		self->n = targetObject->n;
 		self->dtype = targetObject->dtype;
 		self->size = targetObject->size;
 		if (self->dtype == INT) {
-			int* tree = PyMem_New(int, size);
-			int* lazy = PyMem_New(int, size);
-			if (tree == NULL or lazy == NULL) {
+			int* tree = PyMem_New(int, self->size);
+			int* lazy = PyMem_New(int, self->size);
+			if (tree == NULL || lazy == NULL) {
 				PyErr_NoMemory();
+				return -1;
 			}
 			int* target_tree = (int*)targetObject->tree;
 			int* target_lazy = (int*)targetObject->lazy;
-			for (int i=0; i<self->size; i++) {
+			int i;
+			for (i=0; i<self->size; i++) {
 				tree[i] = target_tree[i];
 				lazy[i] = target_lazy[i];
 			}
+			self->tree = tree;
+			self->lazy = lazy;
 		} else {
-			double* tree = PyMem_New(double, size);
-			double* lazy = PyMem_New(double, size);
-			if (tree == NULL or lazy == NULL) {
+			double* tree = PyMem_New(double, self->size);
+			double* lazy = PyMem_New(double, self->size);
+			if (tree == NULL || lazy == NULL) {
 				PyErr_NoMemory();
+				return -1;
 			}
 			double* target_tree = (double*)targetObject->tree;
 			double* target_lazy = (double*)targetObject->lazy;
-			for (int i=0; i<self->size; i++) {
+			int i;
+			for (i=0; i<self->size; i++) {
 				tree[i] = target_tree[i];
 				lazy[i] = target_lazy[i];
 			}
+			self->tree = tree;
+			self->lazy = lazy;
 		}
 
 	} else {
@@ -296,7 +313,8 @@ static void lpstree_del(LPSTree* self) {
 }
 
 #define lpstree_update_doc \
-	"update(i, j, diff)\n"\
+	"lpstree.update(i, j, diff)\n"\
+	"\n"\
 	"Update range(i,j) by adding each element by diff.\n"\
 	"The slice doesn't contain j that is [i, j) in interval notation."
 static PyObject* lpstree_update(LPSTree* self, PyObject* args) {
@@ -306,6 +324,10 @@ static PyObject* lpstree_update(LPSTree* self, PyObject* args) {
 		int difference;
 		if (!PyArg_ParseTuple(args, "iii", &updateStart, &updateEnd, &difference)) {
 			PyErr_SetString(PyExc_ValueError, "Arguments error.");
+			return NULL;
+		}
+		if (updateStart < 0 || updateEnd > n || updateStart > updateEnd) {
+			PyErr_SetString(PyExc_IndexError, "Index out of range");
 			return NULL;
 		}
 		int* tree = (int*)self->tree;
@@ -318,21 +340,26 @@ static PyObject* lpstree_update(LPSTree* self, PyObject* args) {
 			PyErr_SetString(PyExc_ValueError, "Arguments error.");
 			return NULL;
 		}
+		if (updateStart < 0 || updateEnd > n || updateStart > updateEnd) {
+			PyErr_SetString(PyExc_IndexError, "Index out of range");
+			return NULL;
+		}
 		double* tree = (double*)self->tree;
 		double* lazy = (double*)self->lazy;
-		updateRange_float(tree, lazy, n, updateStart, updateEnd-1. difference);
+		updateRange_float(tree, lazy, n, updateStart, updateEnd-1, difference);
 	}
-	return NULL;
+	Py_RETURN_NONE;
 }
 
 #define lpstree_sum_doc \
-	"sum(i, j)\n"\
-	"Return sum of elements in range(i, j).\n"\
-	"The slice doesn't contain j that is [i, j) in interval notation.\n"
-	"sum(j)\n"\
-	"Just as sum(0, j).\n"
-	"sum()\n"\
-	"Return sum of all elements."
+	"lpstree.sum(i, j) -> value\n"\
+	"lpstree.sum(j) -> value\n"\
+	"lpstree.sum() -> value\n"\
+	"\n"\
+	"lpstree.sum(i, j) returns sum of elements in range(i, j).\n"\
+	"The slice doesn't contain j that is [i, j) in interval notation.\n"\
+	"lpstree.sum(j) is just sum(0, j).\n"\
+	"lpstree.sum() returns sum of all elements."
 static PyObject* lpstree_sum(LPSTree* self, PyObject* args) {
 	int n = self->n;
 	int queryStart=0, queryEnd=n;
@@ -346,6 +373,10 @@ static PyObject* lpstree_sum(LPSTree* self, PyObject* args) {
 		PyErr_SetString(PyExc_ValueError, "Arguments error.");
 		return NULL;
 	}
+	if (queryStart < 0 || queryEnd > n || queryStart > queryEnd) {
+		PyErr_SetString(PyExc_IndexError, "Index out of range");
+		return NULL;
+	}
 	if (self->dtype == INT) {
 		int* tree = (int*)self->tree;
 		int* lazy = (int*)self->lazy;
@@ -355,6 +386,71 @@ static PyObject* lpstree_sum(LPSTree* self, PyObject* args) {
 		double* lazy = (double*)self->lazy;
 		return PyFloat_FromDouble(getSum_float(tree, lazy, n, queryStart, queryEnd-1));
 	}
+}
+
+#define lpstree_get_doc \
+	"lpstree.get(i) -> item\n"\
+	"\n"\
+	"Get the element in position i."
+static PyObject* lpstree_get(LPSTree* self, PyObject* args) {
+	int n = self->n, i;
+	if (!PyArg_ParseTuple(args, "i", &i)) {
+		PyErr_SetString(PyExc_ValueError, "Arguments error.");
+		return NULL;
+	}
+	if (i < 0 || i > n-1) {
+		PyErr_SetString(PyExc_IndexError, "Index out of range");
+		return NULL;
+	}
+	if (self->dtype == INT) {
+		int* tree = (int*)self->tree;
+		int* lazy = (int*)self->lazy;
+		return PyInt_FromLong(getSum_int(tree, lazy, n, i, i));
+	} else {
+		double* tree = (double*)self->tree;
+		double* lazy = (double*)self->lazy;
+		return PyFloat_FromDouble(getSum_float(tree, lazy, n, i, i));
+	}
+}
+
+#define lpstree_set_doc \
+	"lpstree.set(i, value)\n"\
+	"\n"\
+	"Set the element in position i to value."
+static PyObject* lpstree_set(LPSTree* self, PyObject* args) {
+	int n = self->n, i;
+	if (self->dtype == INT) {
+		int* tree = (int*)self->tree;
+		int* lazy = (int*)self->lazy;
+		int newValue, oldValue, difference;
+		if (!PyArg_ParseTuple(args, "ii", &i, &newValue)) {
+			PyErr_SetString(PyExc_ValueError, "Arguments error.");
+			return NULL;
+		}
+		if (i < 0 || i > n-1) {
+			PyErr_SetString(PyExc_IndexError, "Index out of range");
+			return NULL;
+		}
+		oldValue = getSum_int(tree, lazy, n, i, i);
+		difference = newValue - oldValue;
+		updateRange_int(tree, lazy, n, i, i, difference);
+	} else {
+		double* tree = (double*)self->tree;
+		double* lazy = (double*)self->lazy;
+		double newValue, oldValue, difference;
+		if (!PyArg_ParseTuple(args, "id", &i, &newValue)) {
+			PyErr_SetString(PyExc_ValueError, "Arguments error.");
+			return NULL;
+		}
+		if (i < 0 || i > n-1) {
+			PyErr_SetString(PyExc_IndexError, "Index out of range");
+			return NULL;
+		}
+		oldValue = getSum_float(tree, lazy, n, i, i);
+		difference = newValue - oldValue;
+		updateRange_float(tree, lazy, n, i, i, difference);
+	}
+	Py_RETURN_NONE;
 }
 
 static PyMemberDef lpstree_members[] = {
@@ -378,11 +474,13 @@ static PyMemberDef lpstree_members[] = {
 static PyMethodDef lpstree_methods[] = {
 	{"update", lpstree_update, METH_VARARGS, lpstree_update_doc},
 	{"sum", lpstree_sum, METH_VARARGS, lpstree_sum_doc},
+	{"get", lpstree_get, METH_VARARGS, lpstree_get_doc},
+	{"set", lpstree_set, METH_VARARGS, lpstree_set_doc},
 	{NULL, NULL, 0, NULL}
 };
 
 static PyTypeObject lpstree_type = {
-	PY_OBJECT_HEAD_INIT
+	PyVarObject_HEAD_INIT(NULL, 0)
 	"leonwolf.LPSTree",
 	sizeof(LPSTree),					// tp_size
 	0,									// tp_itemsize?
@@ -420,4 +518,4 @@ static PyTypeObject lpstree_type = {
 	lpstree_init,						// tp_init
 	0,									// tp_alloc
 	lpstree_new,						// tp_new
-}
+};
