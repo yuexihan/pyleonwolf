@@ -34,5 +34,8 @@ static PyObject* lpstree_update(LPSTree* self, PyObject* args);
 static PyObject* lpstree_sum(LPSTree* self, PyObject* args);
 static PyObject* lpstree_get(LPSTree* self, PyObject* args);
 static PyObject* lpstree_set(LPSTree* self, PyObject* args);
+static ssize_t lpstree_Size(LPSTree* self);
+static PyObject* lpstree_GetItem(LPSTree* self, ssize_t i);
+static int lpstree_SetItem(LPSTree* self, ssize_t i, PyObject* args);
 
 #endif
