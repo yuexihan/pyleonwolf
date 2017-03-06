@@ -64,7 +64,7 @@ Add a value to each element of interval [i, j)::
     >>> tree[3]
     -2
 
-Below has the same effect as tree[1]+=-2, tree[2]+=-2, tree[3]+=-2, but much
+Above has the same effect as tree[1]+=-2, tree[2]+=-2, tree[3]+=-2, but much
 faster.
 
 Get the sum of elements in a given interval with the sum method::
