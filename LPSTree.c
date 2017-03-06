@@ -242,6 +242,9 @@ static int lpstree_init(LPSTree* self, PyObject* args, PyObject* kwargs) {
 			}
 			constructST_int(self, array);
 			PyMem_Del(array);
+			if (PyErr_Occurred()) {
+				return -1;
+			}
 		} else {
 			self->dtype = DOUBLE;
 			double* array = PyMem_New(double, n);
@@ -255,6 +258,9 @@ static int lpstree_init(LPSTree* self, PyObject* args, PyObject* kwargs) {
 			}
 			constructST_float(self, array);
 			PyMem_Del(array);
+			if (PyErr_Occurred()) {
+				return -1;
+			}
 		}
 	} else if (PyArg_ParseTuple(args, "O", &object)) {
 		PyErr_Clear();
@@ -453,6 +459,31 @@ static PyObject* lpstree_set(LPSTree* self, PyObject* args) {
 	Py_RETURN_NONE;
 }
 
+static ssize_t lpstree_Size(LPSTree* self) {
+	return self->n;
+}
+
+static PyObject* lpstree_GetItem(LPSTree* self, ssize_t i) {
+	PyObject* index = PyInt_FromLong(i);
+	PyObject* new_args = Py_BuildValue("(O)", index);
+	PyObject* result = lpstree_get(self, new_args);
+	Py_DECREF(index);
+	Py_DECREF(new_args);
+	return result;
+}
+
+static int lpstree_SetItem(LPSTree* self, ssize_t i, PyObject* value) {
+	PyObject* index = PyInt_FromLong(i);
+	PyObject* new_args = Py_BuildValue("(OO)", index, value);
+	lpstree_set(self, new_args);
+	Py_DECREF(index);
+	Py_DECREF(new_args);
+	if (PyErr_Occurred()) {
+		return -1;
+	}
+	return 0;
+}
+
 static PyMemberDef lpstree_members[] = {
 	{
 		"size",
@@ -519,3 +550,5 @@ static PyTypeObject lpstree_type = {
 	0,									// tp_alloc
 	lpstree_new,						// tp_new
 };
+
+static PySequenceMethods lpstree_as_sequence;

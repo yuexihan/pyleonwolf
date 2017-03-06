@@ -32,6 +32,10 @@ static struct PyModuleDef leonwolf_module = {
 PyMODINIT_FUNC init_function() {
 	PyObject* module;
 
+	lpstree_as_sequence.sq_length = lpstree_Size;
+	lpstree_as_sequence.sq_item = lpstree_GetItem;
+	lpstree_as_sequence.sq_ass_item = lpstree_SetItem;
+	lpstree_type.tp_as_sequence = &lpstree_as_sequence;
 
 #ifdef PY3K
 	module = PyModule_Create(&leonwolf_module);
